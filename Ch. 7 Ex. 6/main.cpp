@@ -1,0 +1,467 @@
+/*
+	calculator08buggy.cpp
+
+	Helpful comments removed.
+
+	We have inserted 3 bugs that the compiler will catch and 3 that it won't.
+*/
+
+#include "../std_lib_facilities.h"
+
+const string prompt = "> ";
+const string result = "= ";
+
+const char defkind = 'd';
+const char redefkind = 'r';
+const char constkind = 'c';
+const char quitkind = 'q';
+const char printkind = ';';
+const char numberkind = '0';
+const char namekind = 'n';
+const char sqrtkind = 's';
+const char powkind = 'p';
+const char helpkind = 'h';
+
+const string defkey = "def";
+const string redefkey = "redef";
+const string constkey = "const";
+const string quitkey = "quit";
+const string sqrtkey = "sqrt";
+const string powkey = "pow";
+
+class Token_stream;
+struct Token;
+struct Variable;
+
+// double get_value(string s);
+// void set_value(string s, double d);
+// bool is_declared(string s);
+double define();
+double redefine();
+void predefine_vars();
+
+unsigned int factorial(unsigned int a);
+
+double primary();
+double term();
+double expression();
+double statement();
+
+void calculate();
+
+void clean_up_mess();
+
+void help();
+
+struct Token {
+	char kind;
+	double value;
+	string name;
+	Token(char c): kind(c), value(0.0) { }
+	Token(char c, double d): kind(c), value(d) { }
+	Token(char c, string s): kind(c), name(s) { }
+};
+
+class Token_stream {
+	bool full;
+	Token buffer;
+public:
+	Token_stream(): full(false), buffer(0) { }
+
+	Token get() {
+		if (full) {
+			full = false;
+			return buffer;
+		}
+
+		/*
+		char c;
+		cin >> c;
+		*/
+
+		char c;
+		do {
+			cin.get(c);
+		}
+		while (isspace(c) && c != '\n');
+		// cin.unget();
+		// cin.get(c);
+
+		switch (c) {
+		case ';':
+		case '\n':
+			return Token(printkind);
+		case 'h':
+		case 'H':
+			return Token(helpkind);
+		case '(':
+		case ')':
+		case '{':
+		case '}':
+		case '+':
+		case '-':
+		case '*':
+		case '/':
+		case '%':
+		case '=':
+		case '!':
+		case ',':
+			return Token(c);
+		case '.':
+		case '0':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		case '8':
+		case '9':
+		{
+			cin.unget();
+			double d;
+			cin >> d;
+			if (!cin.good()) error("Bad token");
+			return Token(numberkind, d);
+		}
+		default:
+			if (isalpha(c)) {
+				string s;
+				s += c;
+				while (cin.get(c) && (isalpha(c) || isdigit(c) || c == '_')) s += c;
+				cin.unget();
+				if (s == defkey) return Token(defkind);
+				else if (s == redefkey) return Token(redefkind);
+				else if (s == constkey) return Token(constkind);
+				else if (s == quitkey) return Token(quitkind);
+				else if (s == sqrtkey) return Token(sqrtkind);
+				else if (s == powkey) return Token(powkind);
+				return Token(namekind, s);
+			}
+			error("Bad token");
+		}
+	}
+
+	void unget(Token t) {
+		buffer = t;
+		full = true;
+	}
+
+	void ignore(char c) {
+		if (full && c == buffer.kind) {
+			full = false;
+			return;
+		}
+
+		full = false;
+
+		char c2;
+		while (cin >> c2)
+			if (c2 == c) return;
+	}
+
+	void ignore() {
+		full = false;
+
+		cin.clear();
+
+		char c;
+		while (true) {
+			c = cin.get();
+			if (c == '\n') return;
+		}
+	}
+};
+
+Token_stream ts;
+
+struct Variable {
+	string name;
+	double value;
+	bool is_constant;
+	Variable(string s, double d): name(s), value(d), is_constant(false) { }
+	Variable(string s, double d, bool b): name(s), value(d), is_constant(b) { }
+};
+
+class Symbol_table {
+	vector<Variable> vars;
+public:
+	Symbol_table() { };
+
+	double get(string name) {
+		for (int i = 0; i < vars.size(); ++i) {
+			if (vars[i].name == name) return vars[i].value;
+		}
+		error("get: undefined name ", name);
+	}
+
+	void set(string name, double val) {
+		for (int i = 0; i < vars.size(); ++i) {
+			if (vars[i].name == name) {
+				if (vars[i].is_constant) error("cannot redefine a constant");
+				vars[i].value = val;
+				return;
+			}
+		}
+		error("set: undefined name ", name);
+	}
+
+	bool is_declared(string name) {
+		for (int i = 0; i < vars.size(); ++i) {
+			if (vars[i].name == name) return true;
+		}
+		return false;
+	}
+
+	void declare(string name, double val, bool is_constant) {
+		vars.push_back(Variable(name, val, is_constant));
+	}
+};
+
+Symbol_table st;
+
+/*
+vector<Variable> vars;
+
+double get_value(string s) {
+	for (int i = 0; i < vars.size(); ++i) {
+		if (vars[i].name == s) return vars[i].value;
+	}
+	error("get: undefined name ", s);
+}
+
+void set_value(string s, double d) {
+	for (int i = 0; i < vars.size(); ++i) {
+		if (vars[i].name == s) {
+			if (vars[i].is_constant) error("cannot redefine a constant");
+			vars[i].value = d;
+			return;
+		}
+	}
+	error("set: undefined name ", s);
+}
+
+bool is_declared(string s) {
+	for (int i = 0; i < vars.size(); ++i) {
+		if (vars[i].name == s) return true;
+	}
+	return false;
+}
+*/
+
+double define() {
+	string name;
+	double val;
+	bool is_constant = false;
+
+	Token t = ts.get();
+	switch (t.kind) {
+	case constkind:
+		is_constant = true;
+		t = ts.get();
+		if (t.kind != namekind) error("name expected in declaration");
+	case namekind:
+		name = t.name;
+		if (/*is_declared(name)*/st.is_declared(name)) error(name, " declared twice");
+		t = ts.get();
+		if (t.kind != '=') error("= missing in declaration of ", name);
+		val = expression();
+		// vars.push_back(Variable(name, val, is_constant));
+		st.declare(name, val, is_constant);
+		return val;
+		break;
+	default:
+		error("name expected in declaration");
+	}
+}
+
+double redefine() {
+	Token t = ts.get();
+	if (t.kind != namekind) error("name expected in declaration");
+	string name = t.name;
+	t = ts.get();
+	if (t.kind != '=') error("= missing in declaration of ", name);
+	double val = expression();
+	// set_value(name, val);
+	st.set(name, val);
+	return val;
+}
+
+void predefine_vars() {
+	// vars.push_back(Variable("pi", 3.14, true));
+	// vars.push_back(Variable("e", 2.72, true));
+	st.declare("pi", 3.14, true);
+	st.declare("e", 2.72, true);
+}
+
+unsigned int factorial(unsigned int a) {
+	unsigned int f = 1;
+	for (unsigned int i = 2; i <= a; ++i) f *= i;
+	return f;
+}
+
+double primary() {
+	Token t = ts.get();
+	switch (t.kind) {
+	case '(':
+	{
+		double d = expression();
+		t = ts.get();
+		if (t.kind != ')') error("')' expected");
+		return d;
+	}
+	case '{':
+	{
+		double d = expression();
+		t = ts.get();
+		if (t.kind != '}') error("'}' expected");
+		return d;
+	}
+	case sqrtkind:
+	{
+		t = ts.get();
+		if (t.kind != '(') error("'(' expected");
+		double d = expression();
+		t = ts.get();
+		if (t.kind != ')') error("')' expected");
+		if (d < 0) error("sqrt of a negative value");
+		return sqrt(d);
+	}
+	case powkind:
+	{
+		t = ts.get();
+		if (t.kind != '(') error("'(' expected");
+		double d = expression();
+		t = ts.get();
+		if (t.kind != ',') error("',' expected");
+		double d2 = expression();
+		t = ts.get();
+		if (t.kind != ')') error("')' expected");
+		return pow(d, (int)d2);
+	}
+	case '-':
+		return -primary();
+	case numberkind:
+	{
+		Token t2 = ts.get();
+		if (t2.kind == '!') {
+			return factorial(t.value);
+		}
+		else {
+			ts.unget(t2);
+			return t.value;
+		}
+	}
+	case namekind:
+		// return get_value(t.name);
+		return st.get(t.name);
+	default:
+		error("primary expected");
+	}
+}
+
+double term() {
+	double left = primary();
+	while (true) {
+		Token t = ts.get();
+		switch (t.kind) {
+		case '*':
+			return left *= primary();
+		case '/':
+		{
+			double d = primary();
+			if (d == 0) error("divide by zero");
+			return left /= d;
+		}
+		default:
+			ts.unget(t);
+			return left;
+		}
+	}
+}
+
+double expression() {
+	double left = term();
+	while (true) {
+		Token t = ts.get();
+		switch (t.kind) {
+		case '+':
+			return left += term();
+		case '-':
+			return left -= term();
+		default:
+			ts.unget(t);
+			return left;
+		}
+	}
+}
+
+double statement() {
+	Token t = ts.get();
+	switch (t.kind) {
+	case defkind:
+		return define();
+	case redefkind:
+		return redefine();
+	default:
+		ts.unget(t);
+		return expression();
+	}
+}
+
+void calculate() {
+	while (true) {
+		try {
+			cout << prompt;
+			Token t = ts.get();
+			while (t.kind == printkind) t = ts.get();
+			if (t.kind == quitkind) return;
+			else if (t.kind == helpkind) {
+				help();
+				continue;
+			}
+			ts.unget(t);
+			cout << result << statement() << '\n';
+		}
+		catch (runtime_error& e) {
+			cerr << e.what() << '\n';
+			clean_up_mess();
+		}
+	}
+}
+
+void clean_up_mess() {
+	// ts.ignore(print);
+	ts.ignore();
+}
+
+void help() {
+	cout << "Supported operators: (), {}, +, -, *, /, !.\n"
+		 << "Supported functions: sqrt(x), pow(x,i).\n"
+		 << "You may put multiple expressions on one line separated by ';'.\n"
+		 << "Use def keyword to define a variable/constant\n(example def x=3 / def const y=76.3).\n"
+		 << "Use redef keyword to redefine a variable (example redef x=4).\n"
+		 << "Type quit to quit the program.\n";
+}
+
+int main() {
+	predefine_vars();
+	cout << "Welcome to the calculator. Type h at any moment to get help.\n";
+	try {
+		calculate();
+		return 0;
+	}
+	catch (exception& e) {
+		cerr << "exception: " << e.what() << '\n';
+		char c;
+		while (cin >> c && c != ';');
+		return 1;
+	}
+	catch (...) {
+		cerr << "exception\n";
+		char c;
+		while (cin >> c && c != ';');
+		return 2;
+	}
+}
